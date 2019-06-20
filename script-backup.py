@@ -12,7 +12,7 @@ import os
 import shutil
 
 import configparser
-
+import sys
 
 def export_db(user, password, host, port, database, targetPath, command_path, excludes):
     ''' Export the databases using the current configuration
@@ -183,7 +183,7 @@ def copy_structure(directories, destiny):
     ''' Copy directories with subdirectories and files and compress them in a tar file
 
     Keyword arguments:
-    directories -- a list with strings for the paths of the directories to copy and compress
+    directories -- a list with tuples with strings for the paths of the directories to copy and compress and the names of the compressed files
     destiny -- the path where the tar files will be created
 
     Important: Omit the last slash in the path when using this function
@@ -192,14 +192,14 @@ def copy_structure(directories, destiny):
     '''
     error_message = ""
     correct_message = ""
-    for directory in directories:
+    for name, directory in directories:
         try:
             if os.path.exists(directory):
                 #Extract the relevant parts of the path
                 base_dir = os.path.basename(directory)
                 parent_dir = Path(directory).parent
 
-                path = os.path.join(destiny, base_dir)
+                path = os.path.join(destiny, name)
 
                 #Casting for 3.5.3 Compatible
                 base_dir = str(base_dir)
@@ -339,7 +339,9 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     #Keep case sensitive
     config.optionxform = str
-    config.read('configuration.ini')
+    #This script must be called with an argument containing the path to the configuration
+    #file.
+    config.read(sys.argv[1])
 
     #Create basic tools
     local_dir = config['general']['local_dir']
@@ -390,7 +392,7 @@ if __name__ == "__main__":
 
     if config['actions'].getboolean('copy_structure_action'):
         log.write("Copiando directorios de forma local: \n")
-        directories = [x for x in config['directories'].values()]
+        directories = config['directories'].items()
         (error, correct) = copy_structure(directories, joined_dir)
         if error:
             log.write(error)
@@ -473,21 +475,21 @@ if __name__ == "__main__":
         if error_aux:
             success = False
 
-    #Sends the email just if there was an error, or a limit was reached
-    if (limit_aux or error_aux) and not config['actions'].getboolean('send_email_action'):
-        subject = "Aviso: Comprobación de tamaño de bases de datos."
-        body = correct_size +  limit_aux + error_aux
-        #Format for html
-        body = body.replace("\n", "<br>")
-        user = config['email']['email_sender']
-        send_from = user
-        send_to = config['email']['email_receiver']
-        smtp_server = config['email']['smtp_server']
-        port = config['email']['port']
-        passw = config['email']['password']
-        TLS = config['email'].getboolean('TLS')
+        #Sends the email just if there was an error, or a limit was reached
+        if (limit_aux or error_aux) and not config['actions'].getboolean('send_email_action'):
+            subject = "Aviso: Comprobación de tamaño de bases de datos."
+            body = correct_size +  limit_aux + error_aux
+            #Format for html
+            body = body.replace("\n", "<br>")
+            user = config['email']['email_sender']
+            send_from = user
+            send_to = config['email']['email_receiver']
+            smtp_server = config['email']['smtp_server']
+            port = config['email']['port']
+            passw = config['email']['password']
+            TLS = config['email'].getboolean('TLS')
 
-        send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
+            send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
 
 
 
