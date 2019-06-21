@@ -1,18 +1,18 @@
+import os
+import sys
+import shutil
+import configparser
+from pathlib import Path
 import subprocess
+from subprocess import Popen, PIPE
 import datetime
 
-import email.message
 import smtplib
 from os.path import basename
+import email.message
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 
-from pathlib import Path
-import os
-import shutil
-
-import configparser
-import sys
 
 def export_db(user, password, host, port, database, targetPath, command_path, excludes):
     ''' Export the databases using the current configuration
@@ -98,8 +98,8 @@ def check_db_size(user, password, host, port, database, max_size, command_path):
     return (limit_reached, error_message)
 
 
-def send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True):
-    ''' Sends an email with the specified data
+def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True):
+    ''' Sends an email by smtp with the specified data
 
     Keyword arguments:
     subject -- the subject of the message
@@ -175,6 +175,31 @@ def send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw,
             error_message += "El servidor de correo rechazó la conexión." + "\n"
         #Close the connection
         smtpObj.quit()
+
+    return(error_message)
+
+
+def send_mail_sendmail(subject, send_from, send_to, body, command_path):
+    ''' Sends an email by sendmail with the specified data
+
+    Keyword arguments:
+    subject -- the subject of the message
+    send_from -- the sender of the message
+    send_to -- the receiver of the message
+    body -- the body of the message (it can contains html tags)
+
+    Returns: An error message.
+    '''
+    error_message = ""
+
+    msg = email.message.EmailMessage()
+    msg["From"] = send_from
+    msg["To"] = send_to
+    msg["Subject"] = subject
+    msg.add_header('Content-Type','text/html')
+    msg.set_payload(body)
+    sendmailprocess = Popen([command_path, "-t", "-oi"], stdin=PIPE, universal_newlines=True)
+    sendmailprocess.communicate(msg.as_string())
 
     return(error_message)
 
@@ -489,7 +514,7 @@ if __name__ == "__main__":
             passw = config['email']['password']
             TLS = config['email'].getboolean('TLS')
 
-            send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
+            send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
 
 
 
@@ -511,11 +536,16 @@ if __name__ == "__main__":
         body = body.replace("\n", "<br>")
         log.close()
 
-        user = config['email']['email_sender']
-        send_from = user
-        send_to = config['email']['email_receiver']
-        smtp_server = config['email']['smtp_server']
-        port = config['email']['port']
-        passw = config['email']['password']
-        TLS = config['email'].getboolean('TLS')
-        send_mail(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
+        if config['email']['method'] == 'smtp':
+            user = config['email']['email_sender']
+            send_from = user
+            send_to = config['email']['email_receiver']
+            smtp_server = config['email']['smtp_server']
+            port = config['email']['port']
+            passw = config['email']['password']
+            TLS = config['email'].getboolean('TLS')
+            send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
+        elif config['email']['method'] == 'sendmail':
+            send_from = config['email']['email_sender']
+            send_to = config['email']['email_receiver']
+            send_mail_sendmail(subject, send_from, send_to, body, config['executables']['sendmail'])
