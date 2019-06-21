@@ -341,7 +341,7 @@ if __name__ == "__main__":
     config.optionxform = str
     #This script must be called with an argument containing the path to the configuration
     #file.
-    config.read(sys.argv[1])
+    config.read(sys.argv[1], encoding='utf8')
 
     #Create basic tools
     local_dir = config['general']['local_dir']
@@ -354,14 +354,14 @@ if __name__ == "__main__":
     if os.path.exists(logfile_path):
         os.remove(logfile_path)
     #Create the log file if doesn't exist
-    log = open(logfile_path, 'a')
+    log = open(logfile_path, 'a', encoding='utf8')
     log.write("Registro de actividad: \n")
     log.write("Fecha y hora de inicio: " + now.strftime("%Y-%m-%d %H:%M:%S")  + "\n" + "\n")
 
 
     if config['actions'].getboolean('export_db_action') or config['actions'].getboolean('copy_structure_action'):
         #Create a directory with the current datetime like name
-        new_dir = now.strftime("%Y-%m-%d %H:%M:%S")
+        new_dir = now.strftime("%Y%m%d-%H%M%S")
         joined_dir = os.path.join(local_dir, new_dir)
         os.makedirs(joined_dir)
 
@@ -505,7 +505,7 @@ if __name__ == "__main__":
         else:
             subject = "ERROR"
 
-        log = open(logfile_path, 'r')
+        log = open(logfile_path, 'r', encoding='utf8')
         body = log.read()
         #Format for html
         body = body.replace("\n", "<br>")
