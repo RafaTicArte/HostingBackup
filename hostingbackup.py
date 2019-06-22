@@ -14,7 +14,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 
 
-def export_db(user, password, host, port, database, targetPath, command_path, excludes):
+def export_db(user, password, host, port, database, targetPath, command_path, excludes, alias):
     ''' Export the databases using the current configuration
 
     Keyword arguments:
@@ -25,6 +25,7 @@ def export_db(user, password, host, port, database, targetPath, command_path, ex
     targetPath -- the path of the backup file that will be created
     command_path -- the path of the command to be executed
     excludes -- a list containing all the tables to be excluded
+    alias -- the name for the dumped file
 
     Returns: An error message and a correct message.
     '''
@@ -32,7 +33,7 @@ def export_db(user, password, host, port, database, targetPath, command_path, ex
     correct_message = ""
 
     try:
-        targetPath_final = os.path.join(targetPath, database + ".sql")
+        targetPath_final = os.path.join(targetPath, alias + ".sql")
         #Create a list containing all the parameters
         args = [command_path, "-u", user, "--port", port, "-p"+password, "-h", host, database]
 
@@ -407,7 +408,8 @@ if __name__ == "__main__":
                     #Create a list containing all the tables to exclude
                     if "exclude" in key:
                         excludes.append(config[section][key])
-                error = export_db(user, password, host, port, database, targetPath, command_path, excludes)
+                alias = config[section]['alias']
+                error = export_db(user, password, host, port, database, targetPath, command_path, excludes, alias)
                 full_error += error
         if full_error:
             log.write(full_error)
