@@ -1,3 +1,4 @@
+# coding: utf8
 import os
 import sys
 import shutil
@@ -12,46 +13,123 @@ from os.path import basename
 import email.message
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
-def export_db(user, password, host, port, database, targetPath, command_path, excludes, alias):
-    ''' Export the databases using the current configuration
+def delete_local_older(path, days):
+    ''' Delete all the directories in path if these directories are older
+        that the indicated days.
 
     Keyword arguments:
+    path -- a list with strings for the paths of the directories to copy and compress
+    days -- Used to check which directories are older.
+
+    Returns: An error message
+    '''
+    error_code = 0
+    error_message = ""
+    current_dir = None
+
+    try:
+        p = Path(path)
+        #Follow all the elements in the path that are directories
+        for dir in p.iterdir():
+            if dir.is_dir():
+                current_dir = dir
+                #Read the time of last modification
+                time_modified = datetime.datetime.fromtimestamp(os.stat(dir.as_posix()).st_mtime)
+                #Compares with the current time to check if it is old enough to be deleted
+                if datetime.datetime.now() - time_modified > datetime.timedelta(days=days):
+                    shutil.rmtree(str(dir))
+                    error_message += "(OK) " + str(current_dir) + "\n"
+    except OSError:
+        error_code = 1
+        error_message += "(ERROR) " + str(current_dir) + "\n"
+
+    return error_code, error_message
+
+
+def copy_structure(directories, targetPath):
+    ''' Copy directories with subdirectories and files and compress them in a tar file
+
+    Keyword arguments:
+    directories -- a list with tuples with strings for the paths of the directories to copy and compress and the names of the compressed files
+    targetPath -- the path where the tar files will be created
+
+    Important: Omit the last slash in the path when using this function
+
+    Returns: An error message and a correct message
+    '''
+    error_code = 0
+    error_message = ""
+    for name, directory in directories:
+        try:
+            if os.path.exists(directory):
+                #Extract the relevant parts of the path
+                base_dir = os.path.basename(directory)
+                parent_dir = Path(directory).parent
+
+                path = os.path.join(targetPath, name)
+
+                #Casting for 3.5.3 Compatible
+                base_dir = str(base_dir)
+                parent_dir = str(parent_dir)
+                path = str(path)
+
+                #Make the tar file
+                shutil.make_archive(path, "gztar", parent_dir, base_dir)
+                error_message += "(OK) " + directory + "\n"
+            else:
+                error_code = 1
+                error_message += "(ERROR) " + directory + "\n"
+        except OSError:
+            error_code = 2
+            error_message += "(ERROR) " + directory + "\n"
+
+    return error_code, error_message
+
+
+def export_db(alias, user, password, host, port, database, targetPath, excludes, command_path):
+    ''' Export database using the current configuration
+
+    Keyword arguments:
+    alias -- the name for the dumped file
     user -- the user to connect to the database
     password -- the password to connect to the database
     host -- the host of the database
     database -- a string with the names of the database to export
     targetPath -- the path of the backup file that will be created
-    command_path -- the path of the command to be executed
     excludes -- a list containing all the tables to be excluded
-    alias -- the name for the dumped file
+    command_path -- the path of the command to be executed
 
-    Returns: An error message and a correct message.
+    Returns: An error code and error message.
     '''
+    error_code = 0
     error_message = ""
-    correct_message = ""
 
     try:
         targetPath_final = os.path.join(targetPath, alias + ".sql")
+
         #Create a list containing all the parameters
         args = [command_path, "-u", user, "--port", port, "-p"+password, "-h", host, database]
-
         args.extend(["--result-file", targetPath_final])
         #Specifies which tables will be excluded
         for table in excludes:
             args.extend(["--ignore-table" , database + "." + table])
 
         #Execute the command
-        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+        process = subprocess.check_output(args, stderr=subprocess.STDOUT)
+
+        error_message += "(OK) " + alias + "\n"
+
     except subprocess.CalledProcessError as e:
-        error_message += "Error al exportar la bases de datos " + database + "\n"
-        error_message += e.output.decode() + "\n"
+        error_code = 1
+        error_message += "(ERROR) " + alias + " " + e.output.decode().rstrip("\n") + "\n"
 
-    return error_message
+    return error_code, error_message
 
 
-def check_db_size(user, password, host, port, database, max_size, command_path):
+def check_db_size(alias, user, password, host, port, database, max_size, command_path):
     ''' Checks if the size of a database has reached some maximum size
 
     Keyword arguments:
@@ -66,25 +144,19 @@ def check_db_size(user, password, host, port, database, max_size, command_path):
     The boolean limit_reached will be True if the current size of the database
     checked is greater than the max_size.
     '''
-
+    error_code = 0
     error_message = ""
-    limit_reached = False
 
     try:
         #Form the query
         query = '''SELECT table_schema "database", sum(data_length + index_length)/1024/1024
         "size in MB" FROM information_schema.TABLES WHERE table_schema='{database}'
         GROUP BY table_schema;'''.format(database=database)
+
         args = [command_path, "-u", user, "-p"+password, "-h", host, "--port", port, "-e", query]
         #Execute the query to check the size of the specified database
         output = subprocess.check_output(args, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        #Assign the null value because there isn't output
-        output = None
-        error_message += "Error al comprobar el tamaño de la base de datos: " + database +"\n"
-        error_message += e.output.decode() + "\n"
 
-    if output:
         #Strip the contents of the string to get the numeric value and discard the rest
         lines = [line for line in output.decode().splitlines()]
         #Strip the headers
@@ -92,11 +164,102 @@ def check_db_size(user, password, host, port, database, max_size, command_path):
 
         #Checks if the current size is greater than the configured maximum size
         if current_size > int(max_size):
-            limit_reached = True
-    else:
-        error_message += "Error al comprobar el tamaño de la base de datos: " + database +"\n"
+            error_code = 1
+            error_message +=  "(ERROR_SIZE) "+ alias + " (" + str(int(current_size)) + "MB)" + "\n"
+        else:
+            error_message += "(OK) " + alias + " (" + str(int(current_size)) + "MB)" + "\n"
 
-    return (limit_reached, error_message)
+    except subprocess.CalledProcessError as e:
+        error_code = 2
+        error_message += "(ERROR) " + alias + " " + e.output.decode().rstrip("\n") + "\n"
+
+    return error_code, error_message
+
+
+def list_gdrive_older(parent, days, command_path):
+    ''' List files and directories that are older than days.
+
+    Keyword arguments:
+    parent -- the code/id of the parent directory, run gdrive --list to discover the
+              right code.
+    days -- used to filter the files whose last modification was previous to a date
+    command_path -- the path to the executable
+
+    Returns: An tuple containing a list of directory ids and an error code and message
+    '''
+    error_code = 0
+    error_message = ""
+    ids = []
+    date_formated = time_ago(days)
+    query = "'" + parent + "' " + "in parents and trashed = false and modifiedTime < "
+    query += "'" + date_formated  + "'"
+    args = [command_path, "list", "--query", query, "-m", "10000"]
+    #Execute the query to list the directories that fullfill the filter
+    try:
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+
+        #Strips the unnecessary data, we just need the codes for the directories
+        lines = output.decode().splitlines()[1:]
+        ids = [line.split(" ")[0] for line in lines]
+
+    except subprocess.CalledProcessError as e:
+        error_code = 1
+        error_message += "(ERROR) GDrive list: " + e.output.decode().rstrip("\n") + "\n"
+
+    return error_code, error_message, ids
+
+
+def delete_gdrive_directories(directories_ids, command_path):
+    ''' Delete some directories in google drive based on the ids.
+
+    Keyword arguments:
+    directories_ids -- A list with the ids of the directories to delete
+    command_path -- the path to the executable
+
+    Returns: An error message
+    '''
+    error_code = 0
+    error_message = ""
+    for id in directories_ids:
+        args = [command_path, "delete", "--recursive", id]
+        #Execute the query to list the directories that fullfill the filter
+        try:
+            output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+            error_message += "(OK) " + str(output) + "\n"
+
+        except subprocess.CalledProcessError as e:
+            error_code = 1
+            error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
+
+    return error_code, error_message
+
+
+def upload_gdrive(path, parent, command_path):
+    ''' Uploads a directory to google drive.
+
+    Keyword arguments:
+    path -- the directory to upload
+    parent -- the code of the parent directory, run gdrive --list to discover the
+              right code.
+    command_path -- the path to the executable
+
+    Returns: An error message
+    '''
+    error_code = 0
+    error_message = ""
+
+    args = [command_path, "upload", "--recursive", "--no-progress", "-p", parent, path]
+    try:
+        #Execute the command to upload the directory
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+
+        error_message += "(OK)\n" + str(output)
+
+    except subprocess.CalledProcessError as e:
+        error_code = 1
+        error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
+
+    return error_code, error_message
 
 
 def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True):
@@ -193,136 +356,20 @@ def send_mail_sendmail(subject, send_from, send_to, body, command_path):
     '''
     error_message = ""
 
-    msg = email.message.EmailMessage()
+    msg = MIMEMultipart('alternative')
     msg["From"] = send_from
     msg["To"] = send_to
     msg["Subject"] = subject
-    msg.add_header('Content-Type','text/html')
-    msg.set_payload(body)
-    sendmailprocess = Popen([command_path, "-t", "-oi"], stdin=PIPE, universal_newlines=True)
-    sendmailprocess.communicate(msg.as_string())
+    msg.attach( MIMEText(body, 'html', 'UTF-8') )
+
+    process = Popen([command_path, "-t", "-oi"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    stdout, stderr = process.communicate(msg.as_string())
+
+    if process != 0:
+        error_message = stderr
 
     return(error_message)
 
-
-def copy_structure(directories, destiny):
-    ''' Copy directories with subdirectories and files and compress them in a tar file
-
-    Keyword arguments:
-    directories -- a list with tuples with strings for the paths of the directories to copy and compress and the names of the compressed files
-    destiny -- the path where the tar files will be created
-
-    Important: Omit the last slash in the path when using this function
-
-    Returns: An error message and a correct message
-    '''
-    error_message = ""
-    correct_message = ""
-    for name, directory in directories:
-        try:
-            if os.path.exists(directory):
-                #Extract the relevant parts of the path
-                base_dir = os.path.basename(directory)
-                parent_dir = Path(directory).parent
-
-                path = os.path.join(destiny, name)
-
-                #Casting for 3.5.3 Compatible
-                base_dir = str(base_dir)
-                parent_dir = str(parent_dir)
-                path = str(path)
-
-                #Make the tar file
-                shutil.make_archive(path, "gztar", parent_dir, base_dir)
-                correct_message += "Se copió correctamente el directorio: " + directory + "\n"
-            else:
-                error_message += "Error no se encontró el directorio: " + directory + "\n"
-        except OSError:
-            error_message += "Error no se encontró el directorio: " + directory + "\n"
-
-    return (error_message, correct_message)
-
-
-def delete_local_old(path, days):
-    ''' Delete all the directories in path if these directories are older
-        that the indicated days.
-
-    Keyword arguments:
-    path -- a list with strings for the paths of the directories to copy and compress
-    days -- Used to check which directories are older.
-
-    Returns: An error message
-    '''
-    error_message = ""
-    current_dir = None
-    try:
-        p = Path(path)
-        #Follow all the elements in the path that are directories
-        for dir in p.iterdir():
-            if dir.is_dir():
-                current_dir = dir
-                #Read the time of last modification
-                time_modified = datetime.datetime.fromtimestamp(os.stat(path).st_mtime)
-                #Compares with the current time to check if it is old enough to be deleted
-                if datetime.datetime.now() - time_modified > datetime.timedelta(days=days):
-                    shutil.rmtree(str(dir))
-    except OSError:
-        error_message += "No se pudo borrar el directorio: " + current_dir + "\n."
-
-    return error_message
-
-
-def upload_gdrive(path, parent, command_path):
-    ''' Uploads a directory to google drive.
-
-    Keyword arguments:
-    path -- the directory to upload
-    parent -- the code of the parent directory, run gdrive --list to discover the
-              right code.
-    command_path -- the path to the executable
-
-    Returns: An error message
-    '''
-    error_message = ""
-
-    args = [command_path, "upload", "--recursive", "-p", parent, path]
-    #Execute the command to upload the directory
-    output = subprocess.check_call(args, stderr=subprocess.STDOUT)
-    #Checks the return code to inform of an error
-    if not output == 0:
-        error_message += "Se produjo un error al subir a google drive"
-
-    return error_message
-
-def list_gdrive_older(parent, days, command_path):
-    ''' Uploads a directory to google drive.
-
-    Keyword arguments:
-    parent -- the code/id of the parent directory, run gdrive --list to discover the
-              right code.
-    days -- used to filter the files whose last modification was previous to a date
-    command_path -- the path to the executable
-
-    Returns: An tuple containing a list of directory ids and an error message
-    '''
-    error_message = ""
-    ids = []
-    date_formated = time_ago(days)
-    query = "'" + parent + "' " + "in parents and trashed = false and modifiedTime < "
-    query += "'" + date_formated  + "'"
-    args = [command_path, "list", "--query", query, "-m", "10000"]
-    #Execute the query to list the directories that fullfill the filter
-    try:
-        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        error_message += "Error al intentar recuperar los directorios antiguos en Gdrive.\n"
-        error_message += e.output.decode() + "\n"
-    #Checks the output
-    #Strips the unnecessary data, we just need the codes for the directories
-    if not error_message:
-        lines = output.decode().splitlines()[1:]
-        ids = [line.split(" ")[0] for line in lines]
-    return (ids, error_message)
 
 def time_ago(days):
     ''' Calculate the date of N days ago and format the result.
@@ -332,67 +379,90 @@ def time_ago(days):
 
     Returns: The calculated date with a proper format
     '''
-    error_message = ""
     date_N_days_ago = datetime.datetime.now() - datetime.timedelta(days=days)
     return date_N_days_ago.strftime("%Y-%m-%dT00:00:00")
 
 
-def delete_gdrive_directories(directories_ids, command_path):
-    ''' Delete some directories in google drive based on the ids.
+def output_format(element, message=''):
+    ''' Change message to HTML format.
 
     Keyword arguments:
-    directories_ids -- A list with the ids of the directories to delete
-    command_path -- the path to the executable
+    element -- HTML element
+    message -- String to format
 
-    Returns: An error message
+    Returns: String with HTML format
     '''
-    error_message = ""
-    for id in directories_ids:
-        args = [command_path, "delete", "--recursive", id]
-        #Execute the query to list the directories that fullfill the filter
-        try:
-            output = subprocess.check_output(args, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            error_message += "Error al intentar borrar los directorios en Gdrive.\n"
-            error_message += e.output.decode() + "\n"
-    return error_message
+    if element == 'table-open':
+        return '<table style="font-family: Helvetica; font-size: 1.1em; line-height: 1.4; border-collapse: collapse; width: 100%; background-color: #fff;">'
+    elif element == 'table-close':
+        return '</table>'
+    elif element == 'caption':
+        return '<caption style="font-size: 1.2em; font-weight: bold; font-variant: small-caps; padding: 5px;">' + message + '</caption>'
+    elif element == 'row-header':
+        return '<tr style="color: #fff; text-transform: uppercase; background-color: #36304a;"><td style="padding: 10px;">' + message + '</td></tr>'
+    elif element == 'row-action':
+        return '<tr style="color: gray; background-color: #f2f2f2;"><td style="padding: 10px;">' + message + '</td></tr>'
+    elif element == 'row':
+        return '<tr style="color: #2b2b2b;"><td style="padding: 5px 10px">' + message + '</td></tr>'
+
 
 #Main Script
 if __name__ == "__main__":
     #To keep count of any failure
     success = True
+    #Error code and message
+    error_code = 0
+    error_message = ""
+
     #Load and read the configuration
     config = configparser.ConfigParser()
     #Keep case sensitive
     config.optionxform = str
-    #This script must be called with an argument containing the path to the configuration
-    #file.
+    #This script must be called with an argument containing the path to the configuration file.
     config.read(sys.argv[1], encoding='utf8')
 
     #Create basic tools
     local_dir = config['general']['local_dir']
     now = datetime.datetime.now()
     joined_dir = None
+
     #Create the path for the log file
     logfile_path = os.path.join(local_dir, "backup.log")
-
-    #Deletes the log file at the start to empty their contents
+    #Delete the log file at the start to empty their contents
     if os.path.exists(logfile_path):
         os.remove(logfile_path)
     #Create the log file if doesn't exist
     log = open(logfile_path, 'a', encoding='utf8')
-    log.write("Registro de actividad: \n")
-    log.write("Fecha y hora de inicio: " + now.strftime("%Y-%m-%d %H:%M:%S")  + "\n" + "\n")
 
+    #Start backup
+    log.write(output_format('table-open'))
+    log.write(output_format('caption', "Registro de actividad"))
+    log.write(output_format('row-header', "Inicio: " + now.strftime("%d-%m-%Y %H:%M:%S")))
 
-    if config['actions'].getboolean('export_db_action') or config['actions'].getboolean('copy_structure_action'):
+    if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
         #Create a directory with the current datetime like name
         new_dir = now.strftime("%Y%m%d-%H%M%S")
         joined_dir = os.path.join(local_dir, new_dir)
         os.makedirs(joined_dir)
 
+    if config['actions'].getboolean('delete_old_local_action'):
+        log.write(output_format('row-action', "Eliminando copias antiguas locales"))
+        days = int(config['general']['days_old_local'])
+        error_code, error_message = delete_local_older(local_dir, days)
+        if error_code != 0:
+            success = False
+        log.write(output_format('row', error_message))
+
+    if config['actions'].getboolean('copy_structure_action'):
+        log.write(output_format('row-action', "Comprimiendo directorios"))
+        directories = config['directories'].items()
+        error_code, error_message = copy_structure(directories, joined_dir)
+        if error_code != 0:
+            success = False
+        log.write(output_format('row', error_message))
+
     if config['actions'].getboolean('export_db_action'):
-        log.write("Exportando bases de datos: \n")
+        log.write(output_format('row-action', "Exportando bases de datos"))
         full_error = ""
         for section in config.sections():
             if "database" in section and config[section].getboolean('export'):
@@ -409,134 +479,70 @@ if __name__ == "__main__":
                     if "exclude" in key:
                         excludes.append(config[section][key])
                 alias = config[section]['alias']
-                error = export_db(user, password, host, port, database, targetPath, command_path, excludes, alias)
-                full_error += error
-        if full_error:
-            log.write(full_error)
-            success = False
-        else:
-            log.write("Todas las bases de datos se exportaron correctamente.\n")
-
-    if config['actions'].getboolean('copy_structure_action'):
-        log.write("Copiando directorios de forma local: \n")
-        directories = config['directories'].items()
-        (error, correct) = copy_structure(directories, joined_dir)
-        if error:
-            log.write(error)
-            success = False
-
-        log.write(correct + "\n")
-
-    if config['actions'].getboolean('delete_old_local_action'):
-        log.write("Borrando copias antiguas de forma local: \n")
-        days = int(config['general']['days_old_local'])
-        error = delete_local_old(local_dir, days)
-        if error:
-            log.write(error)
-            success = False
-        else:
-            log.write("Todos los directorios borrados correctamente.\n")
-        log.write("\n")
-
-    if config['actions'].getboolean('delete_old_gdrive_action'):
-        log.write("Borrando copias antiguas de Google Drive: \n")
-        days = int(config['general']['days_old_gdrive'])
-        parent = config['general']['parent']
-        command_path = config['executables']['gdrive']
-        (dir_ids, error) = list_gdrive_older(parent, days, command_path)
-        if error:
-            #Abort
-            log.write(error)
-            success = False
-        else:
-            error = delete_gdrive_directories(dir_ids, command_path)
-            if error:
-                log.write(error)
-                success = False
-            else:
-                log.write("Borradas con éxito.\n")
-        log.write("\n")
-
-    if config['actions'].getboolean('upload_gdrive_action'):
-        log.write("Subiendo copia a Google Drive: \n")
-        parent = config['general']['parent']
-        command_path = config['executables']['gdrive']
-        error = upload_gdrive(joined_dir, parent, command_path)
-        if error:
-            log.write(error)
-            success = False
-        else:
-            log.write("Correcto: Subida a Google Drive.\n")
-        log.write("\n")
+                error_code, error_message = export_db(alias, user, password, host, port, database, targetPath, excludes, command_path)
+                if error_code != 0:
+                    success = False
+                log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('check_db_size_action'):
+        log.write(output_format('row-action', "Comprobando tamaño bases de datos"))
         command_path = config['executables']['mysql']
-        #Total errors concatenated
-        error_aux = ""
-        limit_aux = ""
-        correct_size = ""
-
-        log.write("Comprobando tamaño de base de datos: " +"\n")
         #Checks all the databases configured
         for section in config.sections():
             if "database" in section and config[section].getboolean('check'):
+                alias = config[section]['alias']
                 database = config[section]['name']
                 max_size = config[section]['size']
                 user = config[section]['user']
                 password = config[section]['password']
                 host = config[section]['host']
                 port = config[section]['port']
-                (limit_reached, error) =check_db_size(user, password, host, port, database, max_size, command_path)
+                error_code, error_message = check_db_size(alias, user, password, host, port, database, max_size, command_path)
 
-                if limit_reached and not error:
-                    limit_aux += "La base de datos " + database + " superó el límite de " + max_size + " MB \n"
-                if error:
-                    error_aux += error
-                if not error and not limit_reached:
-                    correct_size += "La base de datos " + database + " tiene un tamaño correcto. \n"
+                if error_code != 0:
+                    success = False
+                log.write(output_format('row', error_message))
 
-        log.write(correct_size)
-        log.write(limit_aux)
-        log.write(error_aux)
-
-        if error_aux:
+    if config['actions'].getboolean('delete_old_gdrive_action'):
+        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive"))
+        days = int(config['general']['days_old_gdrive'])
+        parent = config['general']['gdrive_dir']
+        command_path = config['executables']['gdrive']
+        error_code, error_message, dir_ids = list_gdrive_older(parent, days, command_path)
+        if error_code != 0:
             success = False
+        else:
+            error_code, error_message = delete_gdrive_directories(dir_ids, command_path)
+            if error_code != 0:
+                success = False
+        log.write(output_format('row', error_message))
 
-        #Sends the email just if there was an error, or a limit was reached
-        if (limit_aux or error_aux) and not config['actions'].getboolean('send_email_action'):
-            subject = "Aviso: Comprobación de tamaño de bases de datos."
-            body = correct_size +  limit_aux + error_aux
-            #Format for html
-            body = body.replace("\n", "<br>")
-            user = config['email']['email_sender']
-            send_from = user
-            send_to = config['email']['email_receiver']
-            smtp_server = config['email']['smtp_server']
-            port = config['email']['port']
-            passw = config['email']['password']
-            TLS = config['email'].getboolean('TLS')
-
-            send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
-
-
+    if config['actions'].getboolean('upload_gdrive_action'):
+        log.write(output_format('row-action', "Subiendo copias a Google Drive"))
+        parent = config['general']['gdrive_dir']
+        command_path = config['executables']['gdrive']
+        error_code, error_message = upload_gdrive(joined_dir, parent, command_path)
+        if error_code != 0:
+            success = False
+        log.write(output_format('row', error_message))
 
     #Close the log file
     now = datetime.datetime.now()
-    log.write(">>>>>>>>>>>>>>>>>>>" + "\n")
-    log.write("Fecha y hora de fin: " + now.strftime("%Y-%m-%d %H:%M:%S")  + "\n" + "\n")
+    log.write(output_format('row-header', "Fin: " + now.strftime("%d-%m-%Y %H:%M:%S")))
+    log.write(output_format('table-close'))
     log.close()
 
     if config['actions'].getboolean('send_email_action'):
         if success:
-            subject = "OK"
+            subject = config['email']['subject'] + " (OK)"
         else:
-            subject = "ERROR"
+            subject = config['email']['subject'] + " (ERROR)"
 
         log = open(logfile_path, 'r', encoding='utf8')
         body = log.read()
+        log.close()
         #Format for html
         body = body.replace("\n", "<br>")
-        log.close()
 
         if config['email']['method'] == 'smtp':
             user = config['email']['email_sender']
@@ -546,8 +552,11 @@ if __name__ == "__main__":
             port = config['email']['port']
             passw = config['email']['password']
             TLS = config['email'].getboolean('TLS')
-            send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
+            error = send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, passw, files=None, TLS=True)
         elif config['email']['method'] == 'sendmail':
             send_from = config['email']['email_sender']
             send_to = config['email']['email_receiver']
-            send_mail_sendmail(subject, send_from, send_to, body, config['executables']['sendmail'])
+            command_path = config['executables']['sendmail']
+            error = send_mail_sendmail(subject, send_from, send_to, body, command_path)
+
+        sys.stdout.write(error)
