@@ -149,8 +149,9 @@ def check_db_size(alias, user, password, host, port, database, max_size, command
 
     try:
         #Form the query
-        query = '''SELECT table_schema "database", sum(data_length + index_length)/1024/1024
-        "size in MB" FROM information_schema.TABLES WHERE table_schema='{database}'
+        query = '''SELECT table_schema AS "Database", SUM(data_length + index_length)/1024/1024 AS "Size in MB"
+        FROM information_schema.TABLES
+        WHERE table_schema='{database}'
         GROUP BY table_schema;'''.format(database=database)
 
         args = [command_path, "-u", user, "-p"+password, "-h", host, "--port", port, "-e", query]
@@ -532,7 +533,7 @@ if __name__ == "__main__":
     log.write(output_format('table-close'))
     log.close()
 
-    if config['actions'].getboolean('send_email_action'):
+    if config['actions']['send_email_action'] == 'Always' or (config['actions']['send_email_action'] == 'OnlyError' and not success):
         if success:
             subject = config['email']['subject'] + " (OK)"
         else:
