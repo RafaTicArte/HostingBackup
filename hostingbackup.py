@@ -1,5 +1,10 @@
 # coding: utf8
+"""
+https://github.com/RafaTicArte/HostingBackup
+"""
+
 import os
+from os.path import basename
 import sys
 import shutil
 import configparser
@@ -9,7 +14,6 @@ from subprocess import Popen, PIPE
 import datetime
 
 import smtplib
-from os.path import basename
 import email.message
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -428,7 +432,7 @@ if __name__ == "__main__":
     joined_dir = None
 
     #Create the path for the log file
-    logfile_path = os.path.join(local_dir, "backup.log")
+    logfile_path = os.path.join(local_dir, os.path.basename(sys.argv[1]) + ".log")
     #Delete the log file at the start to empty their contents
     if os.path.exists(logfile_path):
         os.remove(logfile_path)
@@ -440,12 +444,6 @@ if __name__ == "__main__":
     log.write(output_format('caption', "Registro de actividad"))
     log.write(output_format('row-header', "Inicio: " + now.strftime("%d-%m-%Y %H:%M:%S")))
 
-    if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
-        #Create a directory with the current datetime like name
-        new_dir = now.strftime("%Y%m%d-%H%M%S")
-        joined_dir = os.path.join(local_dir, new_dir)
-        os.makedirs(joined_dir)
-
     if config['actions'].getboolean('delete_old_local_action'):
         log.write(output_format('row-action', "Eliminando copias antiguas locales"))
         days = int(config['general']['days_old_local'])
@@ -453,6 +451,26 @@ if __name__ == "__main__":
         if error_code != 0:
             success = False
         log.write(output_format('row', error_message))
+
+    if config['actions'].getboolean('delete_old_gdrive_action'):
+        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive"))
+        days = int(config['general']['days_old_gdrive'])
+        parent = config['general']['gdrive_dir']
+        command_path = config['executables']['gdrive']
+        error_code, error_message, dir_ids = list_gdrive_older(parent, days, command_path)
+        if error_code != 0:
+            success = False
+        else:
+            error_code, error_message = delete_gdrive_directories(dir_ids, command_path)
+            if error_code != 0:
+                success = False
+        log.write(output_format('row', error_message))
+
+    if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
+        #Create a directory with the current datetime like name
+        new_dir = now.strftime("%Y%m%d-%H%M%S")
+        joined_dir = os.path.join(local_dir, new_dir)
+        os.makedirs(joined_dir)
 
     if config['actions'].getboolean('copy_structure_action'):
         log.write(output_format('row-action', "Comprimiendo directorios"))
@@ -504,20 +522,6 @@ if __name__ == "__main__":
                     success = False
                 log.write(output_format('row', error_message))
 
-    if config['actions'].getboolean('delete_old_gdrive_action'):
-        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive"))
-        days = int(config['general']['days_old_gdrive'])
-        parent = config['general']['gdrive_dir']
-        command_path = config['executables']['gdrive']
-        error_code, error_message, dir_ids = list_gdrive_older(parent, days, command_path)
-        if error_code != 0:
-            success = False
-        else:
-            error_code, error_message = delete_gdrive_directories(dir_ids, command_path)
-            if error_code != 0:
-                success = False
-        log.write(output_format('row', error_message))
-
     if config['actions'].getboolean('upload_gdrive_action'):
         log.write(output_format('row-action', "Subiendo copias a Google Drive"))
         parent = config['general']['gdrive_dir']
@@ -533,6 +537,11 @@ if __name__ == "__main__":
     log.write(output_format('table-close'))
     log.close()
 
+    #Copy the log file in current backup directory
+    if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
+        shutil.copy(logfile_path, joined_dir)
+
+    #Send email
     if config['actions']['send_email_action'] == 'Always' or (config['actions']['send_email_action'] == 'OnlyError' and not success):
         if success:
             subject = config['email']['subject'] + " (OK)"
