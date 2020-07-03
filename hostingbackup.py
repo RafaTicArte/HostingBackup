@@ -162,10 +162,10 @@ def check_db_size(alias, user, password, host, port, database, max_size, command
         #Execute the query to check the size of the specified database
         output = subprocess.check_output(args, stderr=subprocess.STDOUT)
 
-        #Strip the contents of the string to get the numeric value and discard the rest
-        lines = [line for line in output.decode().splitlines()]
-        #Strip the headers
-        current_size = float(lines[1].rsplit('\t')[1])
+        #Strip the content of the string to get the numeric value and discard the rest
+        for line in output.decode().splitlines():
+            if line.rsplit('\t')[0] == database:
+                current_size = float(line.rsplit('\t')[1])
 
         #Checks if the current size is greater than the configured maximum size
         if current_size > int(max_size):
