@@ -115,7 +115,7 @@ def export_db(alias, user, password, host, port, database, targetPath, excludes,
         targetPath_final = os.path.join(targetPath, alias + ".sql")
 
         #Create a list containing all the parameters
-        args = [command_path, "-u", user, "--port", port, "-p"+password, "-h", host, database]
+        args = [command_path, "--single-transaction", "-u", user, "--port", port, "-p"+password, "-h", host, database]
         args.extend(["--result-file", targetPath_final])
         #Specifies which tables will be excluded
         for table in excludes:
@@ -445,7 +445,7 @@ if __name__ == "__main__":
     log.write(output_format('row-header', "Inicio: " + now.strftime("%d-%m-%Y %H:%M:%S")))
 
     if config['actions'].getboolean('delete_old_local_action'):
-        log.write(output_format('row-action', "Eliminando copias antiguas locales"))
+        log.write(output_format('row-action', "Eliminando copias antiguas locales: " + now.strftime("%H:%M:%S")))
         days = int(config['general']['days_old_local'])
         error_code, error_message = delete_local_older(local_dir, days)
         if error_code != 0:
@@ -453,7 +453,7 @@ if __name__ == "__main__":
         log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('delete_old_gdrive_action'):
-        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive"))
+        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive: " + now.strftime("%H:%M:%S")))
         days = int(config['general']['days_old_gdrive'])
         parent = config['general']['gdrive_dir']
         command_path = config['executables']['gdrive']
@@ -473,7 +473,7 @@ if __name__ == "__main__":
         os.makedirs(joined_dir)
 
     if config['actions'].getboolean('copy_structure_action'):
-        log.write(output_format('row-action', "Comprimiendo directorios"))
+        log.write(output_format('row-action', "Comprimiendo directorios: " + now.strftime("%H:%M:%S")))
         directories = config['directories'].items()
         error_code, error_message = copy_structure(directories, joined_dir)
         if error_code != 0:
@@ -481,7 +481,7 @@ if __name__ == "__main__":
         log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('export_db_action'):
-        log.write(output_format('row-action', "Exportando bases de datos"))
+        log.write(output_format('row-action', "Exportando bases de datos: " + now.strftime("%H:%M:%S")))
         full_error = ""
         for section in config.sections():
             if "database" in section and config[section].getboolean('export'):
@@ -504,7 +504,7 @@ if __name__ == "__main__":
                 log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('check_db_size_action'):
-        log.write(output_format('row-action', "Comprobando tamaño bases de datos"))
+        log.write(output_format('row-action', "Comprobando tamaño bases de datos: " + now.strftime("%H:%M:%S")))
         command_path = config['executables']['mysql']
         #Checks all the databases configured
         for section in config.sections():
@@ -523,7 +523,7 @@ if __name__ == "__main__":
                 log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('upload_gdrive_action'):
-        log.write(output_format('row-action', "Subiendo copias a Google Drive"))
+        log.write(output_format('row-action', "Subiendo copias a Google Drive: " + now.strftime("%H:%M:%S")))
         parent = config['general']['gdrive_dir']
         command_path = config['executables']['gdrive']
         error_code, error_message = upload_gdrive(joined_dir, parent, command_path)
