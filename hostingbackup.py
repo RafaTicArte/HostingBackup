@@ -92,7 +92,7 @@ def copy_structure(directories, targetPath, tar_system, command_path):
                     shutil.make_archive(path, "gztar", parent_dir, base_dir)
                 else:
                     args = ["/usr/bin/tar", "czf", targetPath+"/"+name+".tar.gz", directory]
-                    output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+                    output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
                 error_message += "(OK) " + directory + "\n"
             else:
@@ -103,7 +103,7 @@ def copy_structure(directories, targetPath, tar_system, command_path):
             error_message += "(ERROR) " + directory + "\n"
         except subprocess.CalledProcessError as e:
             error_code = 1
-            error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
+            error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -137,13 +137,13 @@ def export_db(alias, user, password, host, port, database, targetPath, excludes,
             args.extend(["--ignore-table" , database + "." + table])
 
         #Execute the command
-        process = subprocess.check_output(args, stderr=subprocess.STDOUT)
+        process = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
         error_message += "(OK) " + alias + "\n"
 
     except subprocess.CalledProcessError as e:
         error_code = 1
-        error_message += "(ERROR) " + alias + " " + e.output.decode().rstrip("\n") + "\n"
+        error_message += "(ERROR) " + alias + " " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -175,7 +175,7 @@ def check_db_size(alias, user, password, host, port, database, max_size, command
 
         args = [command_path, "-u", user, "-p"+password, "-h", host, "--port", port, "-e", query]
         #Execute the query to check the size of the specified database
-        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
         #Strip the content of the string to get the numeric value and discard the rest
         for line in output.decode().splitlines():
@@ -191,7 +191,7 @@ def check_db_size(alias, user, password, host, port, database, max_size, command
 
     except subprocess.CalledProcessError as e:
         error_code = 2
-        error_message += "(ERROR) " + alias + " " + e.output.decode().rstrip("\n") + "\n"
+        error_message += "(ERROR) " + alias + " " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -216,7 +216,7 @@ def list_gdrive_older(parent, days, command_path):
     args = [command_path, "list", "--query", query, "-m", "10000"]
     #Execute the query to list the directories that fullfill the filter
     try:
-        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
         #Strips the unnecessary data, we just need the codes for the directories
         lines = output.decode().splitlines()[1:]
@@ -224,7 +224,7 @@ def list_gdrive_older(parent, days, command_path):
 
     except subprocess.CalledProcessError as e:
         error_code = 1
-        error_message += "(ERROR) GDrive list: " + e.output.decode().rstrip("\n") + "\n"
+        error_message += "(ERROR) GDrive list: " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message, ids
 
@@ -249,7 +249,7 @@ def delete_gdrive_directories(directories_ids, command_path):
 
         except subprocess.CalledProcessError as e:
             error_code = 1
-            error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
+            error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -277,7 +277,7 @@ def upload_gdrive(path, parent, command_path):
 
     except subprocess.CalledProcessError as e:
         error_code = 1
-        error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
+        error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
