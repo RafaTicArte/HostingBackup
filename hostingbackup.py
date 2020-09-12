@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://github.com/RafaTicArte/HostingBackup"
 __author__ = "Rafa Morales and Jesus Budia"
-__version__ = "0.1"
+__version__ = "0.2"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
