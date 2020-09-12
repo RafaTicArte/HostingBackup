@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://github.com/RafaTicArte/HostingBackup"
 __author__ = "Rafa Morales and Jesus Budia"
-__version__ = "0.2"
+__version__ = "0.3"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -178,7 +178,7 @@ def check_db_size(alias, user, password, host, port, database, max_size, command
         output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
         #Strip the content of the string to get the numeric value and discard the rest
-        for line in output.decode().splitlines():
+        for line in output.splitlines():
             if line.rsplit('\t')[0] == database:
                 current_size = float(line.rsplit('\t')[1])
 
@@ -219,7 +219,7 @@ def list_gdrive_older(parent, days, command_path):
         output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
         #Strips the unnecessary data, we just need the codes for the directories
-        lines = output.decode().splitlines()[1:]
+        lines = output.splitlines()[1:]
         ids = [line.split(" ")[0] for line in lines]
 
     except subprocess.CalledProcessError as e:
