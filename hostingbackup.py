@@ -19,6 +19,11 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+__repository__ = "https://github.com/RafaTicArte/HostingBackup"
+__author__ = "Rafa Morales and Jesus Budia"
+__version__ = "0.1"
+__email__ = "rafa@ticarte.com"
+__status__ = "Development"
 
 def delete_local_older(path, days):
     ''' Delete all the directories in path if these directories are older
@@ -53,12 +58,14 @@ def delete_local_older(path, days):
     return error_code, error_message
 
 
-def copy_structure(directories, targetPath):
+def copy_structure(directories, targetPath, tar_system, command_path):
     ''' Copy directories with subdirectories and files and compress them in a tar file
 
     Keyword arguments:
     directories -- a list with tuples with strings for the paths of the directories to copy and compress and the names of the compressed files
     targetPath -- the path where the tar files will be created
+    tar_system -- compress with system executable
+    command_path -- the path of the command to be executed if tar_system is true
 
     Important: Omit the last slash in the path when using this function
 
@@ -81,7 +88,12 @@ def copy_structure(directories, targetPath):
                 path = str(path)
 
                 #Make the tar file
-                shutil.make_archive(path, "gztar", parent_dir, base_dir)
+                if not tar_system:
+                    shutil.make_archive(path, "gztar", parent_dir, base_dir)
+                else:
+                    args = ["/usr/bin/tar", "czf", targetPath+"/"+name+".tar.gz", directory]
+                    output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+
                 error_message += "(OK) " + directory + "\n"
             else:
                 error_code = 1
@@ -89,6 +101,9 @@ def copy_structure(directories, targetPath):
         except OSError:
             error_code = 2
             error_message += "(ERROR) " + directory + "\n"
+        except subprocess.CalledProcessError as e:
+            error_code = 1
+            error_message += "(ERROR) " + e.output.decode().rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -398,18 +413,19 @@ def output_format(element, message=''):
     Returns: String with HTML format
     '''
     if element == 'table-open':
-        return '<table style="font-family: Helvetica; font-size: 1.1em; line-height: 1.4; border-collapse: collapse; width: 100%; background-color: #fff;">'
+        return '<table style="font-family: Helvetica; font-size: 1.1em; line-height: 1.4; border-collapse: collapse; width: 100%; background-color: #fff;">\n'
     elif element == 'table-close':
-        return '</table>'
+        return '</table>\n'
     elif element == 'caption':
-        return '<caption style="font-size: 1.2em; font-weight: bold; font-variant: small-caps; padding: 5px;">' + message + '</caption>'
+        return '<caption style="font-size: 1.2em; font-weight: bold; font-variant: small-caps; padding: 5px;">' + message + '</caption>\n'
     elif element == 'row-header':
-        return '<tr style="color: #fff; text-transform: uppercase; background-color: #36304a;"><td style="padding: 10px;">' + message + '</td></tr>'
+        return '<tr style="color: #fff; text-transform: uppercase; background-color: #36304a;"><td style="padding: 10px;">' + message + '</td></tr>\n'
     elif element == 'row-action':
-        return '<tr style="color: gray; background-color: #f2f2f2;"><td style="padding: 10px;">' + message + '</td></tr>'
+        return '<tr style="color: gray; background-color: #f2f2f2;"><td style="padding: 10px;">' + message + '</td></tr>\n'
     elif element == 'row':
-        return '<tr style="color: #2b2b2b;"><td style="padding: 5px 10px">' + message + '</td></tr>'
-
+        return '<tr style="color: #2b2b2b;"><td style="padding: 5px 10px">' + message + '</td></tr>\n'
+    elif element == 'version':
+        return '<p style="color: gray; font-size: 0.8em;">' + __repository__ + ' [version: ' + __version__ + ']</p>\n'
 
 #Main Script
 if __name__ == "__main__":
@@ -445,6 +461,7 @@ if __name__ == "__main__":
     log.write(output_format('row-header', "Inicio: " + now.strftime("%d-%m-%Y %H:%M:%S")))
 
     if config['actions'].getboolean('delete_old_local_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Eliminando copias antiguas locales: " + now.strftime("%H:%M:%S")))
         days = int(config['general']['days_old_local'])
         error_code, error_message = delete_local_older(local_dir, days)
@@ -453,6 +470,7 @@ if __name__ == "__main__":
         log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('delete_old_gdrive_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Eliminando copias antiguas Google Drive: " + now.strftime("%H:%M:%S")))
         days = int(config['general']['days_old_gdrive'])
         parent = config['general']['gdrive_dir']
@@ -468,19 +486,24 @@ if __name__ == "__main__":
 
     if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
         #Create a directory with the current datetime like name
+        now = datetime.datetime.now()
         new_dir = now.strftime("%Y%m%d-%H%M%S")
         joined_dir = os.path.join(local_dir, new_dir)
         os.makedirs(joined_dir)
 
     if config['actions'].getboolean('copy_structure_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Comprimiendo directorios: " + now.strftime("%H:%M:%S")))
         directories = config['directories'].items()
-        error_code, error_message = copy_structure(directories, joined_dir)
+        tar_system = config['general']['tar_system']
+        command_path = config['executables']['mysqldump']
+        error_code, error_message = copy_structure(directories, joined_dir, tar_system, command_path)
         if error_code != 0:
             success = False
         log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('export_db_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Exportando bases de datos: " + now.strftime("%H:%M:%S")))
         full_error = ""
         for section in config.sections():
@@ -504,6 +527,7 @@ if __name__ == "__main__":
                 log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('check_db_size_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Comprobando tamaño bases de datos: " + now.strftime("%H:%M:%S")))
         command_path = config['executables']['mysql']
         #Checks all the databases configured
@@ -523,6 +547,7 @@ if __name__ == "__main__":
                 log.write(output_format('row', error_message))
 
     if config['actions'].getboolean('upload_gdrive_action'):
+        now = datetime.datetime.now()
         log.write(output_format('row-action', "Subiendo copias a Google Drive: " + now.strftime("%H:%M:%S")))
         parent = config['general']['gdrive_dir']
         command_path = config['executables']['gdrive']
@@ -535,6 +560,7 @@ if __name__ == "__main__":
     now = datetime.datetime.now()
     log.write(output_format('row-header', "Fin: " + now.strftime("%d-%m-%Y %H:%M:%S")))
     log.write(output_format('table-close'))
+    log.write(output_format('version'))
     log.close()
 
     #Copy the log file in current backup directory
