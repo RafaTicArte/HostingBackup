@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://github.com/RafaTicArte/HostingBackup"
 __author__ = "Rafa Morales and Jesus Budia"
-__version__ = "0.3"
+__version__ = "0.4"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -88,13 +88,13 @@ def copy_structure(directories, targetPath, tar_system, command_path):
                 path = str(path)
 
                 #Make the tar file
-                if not tar_system:
-                    shutil.make_archive(path, "gztar", parent_dir, base_dir)
-                else:
+                if tar_system:
                     args = ["/usr/bin/tar", "czf", targetPath+"/"+name+".tar.gz", directory]
                     output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+                else:
+                    shutil.make_archive(path, "gztar", parent_dir, base_dir)
 
-                error_message += "(OK) " + directory + "\n"
+                error_message += "(OK) " + directory + " (" + str(round(os.path.getsize(targetPath+"/"+name+".tar.gz")/1024/1024)) + " MB)\n"
             else:
                 error_code = 1
                 error_message += "(ERROR) " + directory + "\n"
@@ -130,7 +130,8 @@ def export_db(alias, user, password, host, port, database, targetPath, excludes,
         targetPath_final = os.path.join(targetPath, alias + ".sql")
 
         #Create a list containing all the parameters
-        args = [command_path, "--single-transaction", "-u", user, "--port", port, "-p"+password, "-h", host, database]
+        #--force: continue with errors
+        args = [command_path, "--single-transaction", "-u", user, "--port", port, "-p"+password, "-h", host, "--force", database]
         args.extend(["--result-file", targetPath_final])
         #Specifies which tables will be excluded
         for table in excludes:
@@ -413,19 +414,19 @@ def output_format(element, message=''):
     Returns: String with HTML format
     '''
     if element == 'table-open':
-        return '<table style="font-family: Helvetica; font-size: 1.1em; line-height: 1.4; border-collapse: collapse; width: 100%; background-color: #fff;">\n'
+        return '<table style="font-family: Helvetica; font-size: 1.1em; line-height: 1.4; border-collapse: collapse; width: 100%; background-color: #fff;">'
     elif element == 'table-close':
-        return '</table>\n'
+        return '</table>'
     elif element == 'caption':
-        return '<caption style="font-size: 1.2em; font-weight: bold; font-variant: small-caps; padding: 5px;">' + message + '</caption>\n'
+        return '<caption style="font-size: 1.2em; font-weight: bold; font-variant: small-caps; padding: 5px;">' + message + '</caption>'
     elif element == 'row-header':
-        return '<tr style="color: #fff; text-transform: uppercase; background-color: #36304a;"><td style="padding: 10px;">' + message + '</td></tr>\n'
+        return '<tr style="color: #fff; text-transform: uppercase; background-color: #36304a;"><td style="padding: 10px;">' + message + '</td></tr>'
     elif element == 'row-action':
-        return '<tr style="color: gray; background-color: #f2f2f2;"><td style="padding: 10px;">' + message + '</td></tr>\n'
+        return '<tr style="color: gray; background-color: #f2f2f2;"><td style="padding: 10px;">' + message + '</td></tr>'
     elif element == 'row':
-        return '<tr style="color: #2b2b2b;"><td style="padding: 5px 10px">' + message + '</td></tr>\n'
+        return '<tr style="color: #2b2b2b;"><td style="padding: 5px 10px">' + message + '</td></tr>'
     elif element == 'version':
-        return '<p style="color: gray; font-size: 0.8em;">' + __repository__ + ' [version: ' + __version__ + ']</p>\n'
+        return '<p style="color: gray; font-size: 0.8em;">' + __repository__ + ' [version: ' + __version__ + ']</p>'
 
 #Main Script
 if __name__ == "__main__":
