@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://github.com/RafaTicArte/HostingBackup"
 __author__ = "Rafa Morales and Jesus Budia"
-__version__ = "0.4"
+__version__ = "0.5"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -89,18 +89,18 @@ def copy_structure(directories, targetPath, tar_system, command_path):
 
                 #Make the tar file
                 if tar_system:
-                    args = ["/usr/bin/tar", "czf", targetPath+"/"+name+".tar.gz", directory]
+                    args = [command_path, "czf", targetPath+"/"+name+".tar.gz", directory]
                     output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
                 else:
                     shutil.make_archive(path, "gztar", parent_dir, base_dir)
 
-                error_message += "(OK) " + directory + " (" + str(round(os.path.getsize(targetPath+"/"+name+".tar.gz")/1024/1024)) + " MB)\n"
+                error_message += "(OK) " + directory + " (" + str(round(os.path.getsize(targetPath+"/"+name+".tar.gz")/1024/1024)) + "MB)\n"
             else:
                 error_code = 1
-                error_message += "(ERROR) " + directory + "\n"
-        except OSError:
+                error_message += "(ERROR) " + directory + " does not exist\n"
+        except OSError as e:
             error_code = 2
-            error_message += "(ERROR) " + directory + "\n"
+            error_message += "(ERROR) " + directory + " " + e.strerror + "\n"
         except subprocess.CalledProcessError as e:
             error_code = 1
             error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
@@ -496,8 +496,8 @@ if __name__ == "__main__":
         now = datetime.datetime.now()
         log.write(output_format('row-action', "Comprimiendo directorios: " + now.strftime("%H:%M:%S")))
         directories = config['directories'].items()
-        tar_system = config['general']['tar_system']
-        command_path = config['executables']['mysqldump']
+        tar_system = config['general'].getboolean('tar_system')
+        command_path = config['executables']['tar']
         error_code, error_message = copy_structure(directories, joined_dir, tar_system, command_path)
         if error_code != 0:
             success = False
