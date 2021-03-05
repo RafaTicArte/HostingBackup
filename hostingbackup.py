@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://github.com/RafaTicArte/HostingBackup"
 __author__ = "Rafa Morales and Jesus Budia"
-__version__ = "0.5"
+__version__ = "0.6"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -255,6 +255,43 @@ def delete_gdrive_directories(directories_ids, command_path):
     return error_code, error_message
 
 
+def delete_rclone_older(parent, days, command_path):
+    ''' Delete some directories in google drive based on the ids.
+
+    Keyword arguments:
+    parent -- remote directory
+    days -- Keep days
+    command_path -- the path to the executable
+
+    Returns: An error message
+    '''
+    error_code = 0
+    error_message = ""
+    
+    #Execute the query to list the directories
+    try:
+        args = [command_path, "lsd", parent]
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+
+        #Strips the unnecessary data, we just need the codes for the directories
+        args = [command_path, "purge", parent]
+        lines = output.splitlines()[1:]
+        for line in lines:
+            dir_name = line.split()[4]
+            dir_date = datetime.datetime.strptime(dir_name.split("-")[0], '%Y%m%d')
+            dir_date_diff = (datetime.datetime.now().date() - dir_date.date()).days
+            if (dir_date_diff > days):
+                args = [command_path, "purge", parent + "/" + dir_name]
+                output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+                error_message += "(OK) " + dir_name + "\n"
+
+    except subprocess.CalledProcessError as e:
+        error_code = 1
+        error_message += "(ERROR) RClone delete: " + e.output.rstrip("\n") + "\n"
+
+    return error_code, error_message
+
+
 def upload_gdrive(path, parent, command_path):
     ''' Uploads a directory to google drive.
 
@@ -270,6 +307,34 @@ def upload_gdrive(path, parent, command_path):
     error_message = ""
 
     args = [command_path, "upload", "--recursive", "--no-progress", "-p", parent, path]
+    try:
+        #Execute the command to upload the directory
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
+
+        error_message += "(OK)\n" + str(output)
+
+    except subprocess.CalledProcessError as e:
+        error_code = 1
+        error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
+
+    return error_code, error_message
+
+
+def upload_rclone(path_local, path_remote, command_path):
+    ''' Uploads a directory to google drive.
+
+    Keyword arguments:
+    path_local -- the directory to upload
+    path_remote -- the code of the parent directory, run gdrive --list to discover the
+              right code.
+    command_path -- the path to the executable
+
+    Returns: An error message
+    '''
+    error_code = 0
+    error_message = ""
+
+    args = [command_path, "copy", path_local, path_remote]
     try:
         #Execute the command to upload the directory
         output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -485,6 +550,15 @@ if __name__ == "__main__":
                 success = False
         log.write(output_format('row', error_message))
 
+    if config['actions'].getboolean('delete_old_rclone_action'):
+        now = datetime.datetime.now()
+        log.write(output_format('row-action', "Eliminando copias antiguas Google Drive: " + now.strftime("%H:%M:%S")))
+        days = int(config['general']['days_old_gdrive'])
+        parent = config['general']['rclone_dir']
+        command_path = config['executables']['rclone']
+        error_code, error_message = delete_rclone_older(parent, days, command_path)
+        log.write(output_format('row', error_message))
+
     if config['actions'].getboolean('copy_structure_action') or config['actions'].getboolean('export_db_action'):
         #Create a directory with the current datetime like name
         now = datetime.datetime.now()
@@ -553,6 +627,16 @@ if __name__ == "__main__":
         parent = config['general']['gdrive_dir']
         command_path = config['executables']['gdrive']
         error_code, error_message = upload_gdrive(joined_dir, parent, command_path)
+        if error_code != 0:
+            success = False
+        log.write(output_format('row', error_message))
+
+    if config['actions'].getboolean('upload_rclone_action'):
+        now = datetime.datetime.now()
+        log.write(output_format('row-action', "Subiendo copias a Google Drive: " + now.strftime("%H:%M:%S")))
+        parent = config['general']['rclone_dir'] + "/" + new_dir
+        command_path = config['executables']['rclone']
+        error_code, error_message = upload_rclone(joined_dir, parent, command_path)
         if error_code != 0:
             success = False
         log.write(output_format('row', error_message))
