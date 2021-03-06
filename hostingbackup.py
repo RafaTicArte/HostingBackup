@@ -334,12 +334,14 @@ def upload_rclone(path_local, path_remote, command_path):
     error_code = 0
     error_message = ""
 
-    args = [command_path, "copy", path_local, path_remote]
+    args = [command_path, "copy", path_local, path_remote, "-v", "--stats-one-line"]
+    args_low_memory = ["--checkers", "1", "--transfers", "1", "--use-mmap", "--buffer-size", "0M", "--tpslimit", "1", "--no-traverse", "--cache-chunk-no-memory"]
+    args.extend(args_low_memory)
     try:
         #Execute the command to upload the directory
         output = subprocess.check_output(args, stderr=subprocess.STDOUT, universal_newlines=True)
 
-        error_message += "(OK)\n" + str(output)
+        error_message += "(OK) " + path_local + "\n" + str(output)
 
     except subprocess.CalledProcessError as e:
         error_code = 1
@@ -663,7 +665,7 @@ if __name__ == "__main__":
         body = log.read()
         log.close()
         #Format for html
-        body = body.replace("\n", "<br>")
+        body = body.replace("\n", "<br />")
 
         if config['email']['method'] == 'smtp':
             user = config['email']['email_sender']
