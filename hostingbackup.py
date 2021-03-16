@@ -93,11 +93,11 @@ def compress_dirs_local(dirs_local, target_dir, compress_method, command_path):
                 error_message += "(ERROR) " + dir + " does not exist\n"
         except OSError as e:
             error_code = 2
-            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ")\n" \
+            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ") " \
                              + e.strerror + "\n"
         except subprocess.CalledProcessError as e:
             error_code = 1
-            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ")\n" \
+            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ") " \
                              + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
@@ -131,10 +131,10 @@ def export_db(alias, host, port, database, user, password, exclude, target_dir, 
             process_args.extend(["--ignore-table", database + "." + table])
 
         process_output = subprocess.check_output(process_args, stderr=subprocess.STDOUT, universal_newlines=True)
-        error_message += "(OK) " + alias + "\n"
+        error_message += "(OK) " + alias + ".sql" + " (" + file_size(target_file) + ")\n"
     except subprocess.CalledProcessError as e:
         error_code = 1
-        error_message += "(ERROR) " + alias + " " + e.output.rstrip("\n") + "\n"
+        error_message += "(ERROR) " + alias + ".sql" + " (" + file_size(target_file) + ") " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
