@@ -18,7 +18,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-__repository__ = "https://github.com/RafaTicArte/HostingBackup"
+__repository__ = "https://www.ticarte.com/hostingbackup"
 __author__ = "Rafa Morales and Jesus Budia"
 __version__ = "1.0"
 __email__ = "rafa@ticarte.com"
