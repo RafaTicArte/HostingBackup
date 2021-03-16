@@ -176,9 +176,9 @@ def check_size_db(alias, host, port, database, user, password, max_size, command
 
         if db_size > int(max_size):
             error_code = 1
-            error_message += "(WARNING) " + alias + " (" + str(int(db_size)) + "MB)" + "\n"
+            error_message += "(WARNING) " + alias + " (" + convert_size(db_size) + ")" + "\n"
         else:
-            error_message += "(OK) " + alias + " (" + str(int(db_size)) + "MB)" + "\n"
+            error_message += "(OK) " + alias + " (" + convert_size(db_size) + ")" + "\n"
     except subprocess.CalledProcessError as e:
         error_code = 2
         error_message += "(ERROR) " + alias + " " + e.output.rstrip("\n") + "\n"
@@ -390,6 +390,20 @@ def file_size(file):
         return str(round(size_mb / 1024)) + "GB"
     else:
         return str(round(size_mb)) + "MB"
+
+
+def convert_size(size):
+    """ Convert MB size to GB size if it is necessary.
+
+    Keyword arguments:
+    size -- Size in MB.
+
+    Returns: Size and unit.
+    """
+    if size > 1024:
+        return str(round(size / 1024)) + "GB"
+    else:
+        return str(round(size)) + "MB"
 
 
 def output_format(element, message=''):
