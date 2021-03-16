@@ -1,6 +1,6 @@
 # HostingBackup
 
-HostingBackup es un script desarrollado en Python para automatizar la copia de seguridad en un servidor web o similar. Se ideó para ser utilizado en un hosting compartido con acceso SSH en el que se tiene acceso para instalar software propio.
+HostingBackup es un script desarrollado en Python para automatizar la copia de seguridad en un servidor web o similar. Se ideó para ser utilizado en un hosting compartido con acceso SSH en el que no se tienen privilegios para instalar software adicional.
 
 ## Funcionalidades
 
@@ -20,13 +20,13 @@ El script en cada ejecución crea un nuevo directorio con el contenido de la cop
 - [Rclone](https://rclone.org/).
 - Sendmail.
 
+## Descarga
+
+[https://github.com/RafaTicArte/HostingBackup/releases](https://github.com/RafaTicArte/HostingBackup/releases)
+
 ## Instalación
 
-Descarga y descomprime el script del repositorio:
-
-```shell
-https://github.com/RafaTicArte/HostingBackup/archive/master.zip
-```
+Descomprimir, configurar y usar.
 
 ## Configuración
 
@@ -58,6 +58,12 @@ export GOGC=20
 ulimit -u 80
 python hostingbackup.py configuration.ini
 ```
+
+## Código fuente
+
+El código fuente está disponible en el repositorio:
+
+[https://github.com/RafaTicArte/HostingBackup](https://github.com/RafaTicArte/HostingBackup)
 
 ## Contribución
 
