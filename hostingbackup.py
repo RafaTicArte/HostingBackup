@@ -93,10 +93,12 @@ def compress_dirs_local(dirs_local, target_dir, compress_method, command_path):
                 error_message += "(ERROR) " + dir + " does not exist\n"
         except OSError as e:
             error_code = 2
-            error_message += "(ERROR) " + dir + " " + e.strerror + "\n"
+            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ")\n" \
+                             + e.strerror + "\n"
         except subprocess.CalledProcessError as e:
             error_code = 1
-            error_message += "(ERROR) " + e.output.rstrip("\n") + "\n"
+            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ")\n" \
+                             + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
