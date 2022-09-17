@@ -504,6 +504,8 @@ if __name__ == "__main__":
         else:
             sys.exit("El ejecutable de rclone no se ha especificado (rclone)")
         error_code, error_message = delete_dirs_remote(dir_remote, days_keep, command_path)
+        if error_code != 0:
+            success = False
         log.write(output_format('row', error_message))
 
     # Create current backup directory in local directory
