@@ -20,7 +20,7 @@ from email.mime.text import MIMEText
 
 __repository__ = "https://www.ticarte.com/hostingbackup"
 __author__ = "Rafa Morales and Jesús Budia"
-__version__ = "1.2"
+__version__ = "1.3"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -714,7 +714,7 @@ if __name__ == "__main__":
             error_send_mail = send_mail_smtp(subject, sender, receiver, body, smtp_server, smtp_port,
                                              smtp_user, smtp_password, files=None, TLS=True)
         elif config['email']['method'] == 'sendmail':
-            if config.has_option('executables', 'rclone'):
+            if config.has_option('executables', 'sendmail'):
                 command_path = config['executables'].get('sendmail')
                 if not os.path.exists(command_path):
                     sys.exit("El ejecutable de sendmail no existe")
