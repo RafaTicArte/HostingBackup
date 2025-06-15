@@ -87,17 +87,17 @@ def compress_dirs_local(dirs_local, target_dir, compress_method, command_path):
                 else:
                     shutil.make_archive(targz_file, "gztar", parent_dir, base_dir)
 
-                error_message += "(OK) " + dir + " (" + file_size(targz_file + ".tar.gz") + ")\n"
+                error_message += "(OK) " + dir + " (" + get_file_size(targz_file + ".tar.gz") + ")\n"
             else:
                 error_code = 1
                 error_message += "(ERROR) " + dir + " does not exist\n"
         except OSError as e:
             error_code = 2
-            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ") " \
+            error_message += "(ERROR) " + dir + " (" + get_file_size(targz_file + ".tar.gz") + ") " \
                              + e.strerror + "\n"
         except subprocess.CalledProcessError as e:
             error_code = 1
-            error_message += "(ERROR) " + dir + " (" + file_size(targz_file + ".tar.gz") + ") " \
+            error_message += "(ERROR) " + dir + " (" + get_file_size(targz_file + ".tar.gz") + ") " \
                              + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
@@ -131,10 +131,10 @@ def export_db(alias, host, port, database, user, password, exclude, target_dir, 
             process_args.extend(["--ignore-table", database + "." + table])
 
         process_output = subprocess.check_output(process_args, stderr=subprocess.STDOUT, universal_newlines=True)
-        error_message += "(OK) " + alias + ".sql" + " (" + file_size(target_file) + ")\n"
+        error_message += "(OK) " + alias + ".sql" + " (" + get_file_size(target_file) + ")\n"
     except subprocess.CalledProcessError as e:
         error_code = 1
-        error_message += "(ERROR) " + alias + ".sql" + " (" + file_size(target_file) + ") " + e.output.rstrip("\n") + "\n"
+        error_message += "(ERROR) " + alias + ".sql" + " (" + get_file_size(target_file) + ") " + e.output.rstrip("\n") + "\n"
 
     return error_code, error_message
 
@@ -245,7 +245,7 @@ def upload_dir(path_local, path_remote, upload_low_memory, upload_log, command_p
 
     try:
         process_output = subprocess.check_output(process_args, stderr=subprocess.STDOUT, universal_newlines=True)
-        error_message += "(OK) " + path_local + "\n" + str(process_output)
+        error_message += "(OK) " + path_local + " (" + get_dir_size(path_local) + ")" + "\n" + str(process_output)
     except subprocess.CalledProcessError as e:
         error_code = 1
         error_message += "(ERROR) " + path_local + "\n" + e.output.rstrip("\n") + "\n"
@@ -374,10 +374,11 @@ def time_ago(days):
     Returns: The calculated date with a proper format
     '''
     date_N_days_ago = datetime.datetime.now() - datetime.timedelta(days=days)
+
     return date_N_days_ago.strftime("%Y-%m-%dT00:00:00")
 
 
-def file_size(file):
+def get_file_size(file):
     """ Size and unit from file.
 
     Keyword arguments:
@@ -385,14 +386,27 @@ def file_size(file):
 
     Returns: Size and unit.
     """
-    size_mb = os.path.getsize(file) / 1024 / 1024
-    if size_mb > 1024:
-        return str(round(size_mb / 1024)) + "GB"
-    else:
-        return str(round(size_mb)) + "MB"
+    return convert_size(os.path.getsize(file) / 1024 / 1024)
 
+def get_dir_size(path):
+    """ Size and unit from path.
 
-def convert_size(size):
+    Keyword arguments:
+    path -- Directory path.
+
+    Returns: Size and unit.
+    """
+    size = 0
+    with os.scandir(path) as items:
+        for item in items:
+            if item.is_file():
+                size += item.stat().st_size
+            elif item.is_dir():
+                size += get_dir_size(item.path)
+
+    return convert_size(size / 1024 / 1024)
+
+def convert_size(size_mb):
     """ Convert MB size to GB size if it is necessary.
 
     Keyword arguments:
@@ -400,10 +414,10 @@ def convert_size(size):
 
     Returns: Size and unit.
     """
-    if size > 1024:
-        return str(round(size / 1024)) + "GB"
+    if size_mb > 1024:
+        return str(round(size_mb / 1024)) + "GB"
     else:
-        return str(round(size)) + "MB"
+        return str(round(size_mb)) + "MB"
 
 
 def output_format(element, message=''):
