@@ -3,24 +3,24 @@
 https://github.com/RafaTicArte/HostingBackup
 """
 
-import os
-from os.path import basename
-import sys
-import shutil
 import configparser
-from pathlib import Path
-import subprocess
-from subprocess import Popen, PIPE
 import datetime
-import smtplib
 import email.message
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import os
+from os.path import basename
+from pathlib import Path
+import shutil
+import smtplib
+import subprocess
+from subprocess import PIPE, Popen
+import sys
 
 __repository__ = "https://www.ticarte.com/hostingbackup"
 __author__ = "Rafa Morales and Jesús Budia"
-__version__ = "1.3"
+__version__ = "1.4"
 __email__ = "rafa@ticarte.com"
 __status__ = "Development"
 
@@ -253,22 +253,22 @@ def upload_dir(path_local, path_remote, upload_low_memory, upload_log, command_p
     return error_code, error_message
 
 
-def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, password, files=None, TLS=True):
+def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user=None, password=None, files=None, encryption="TLS"):
     """ Sends an email by SMTP protocol with the specified data
 
     Keyword arguments:
     subject -- Subject of the message.
     send_from -- Sender of the message.
     send_to -- Receiver of the message.
-    body --Body of the message (it can contains HTML tags).
+    body -- Body of the message (it can contain HTML tags).
     smtp_server -- URL of the SMTP server.
     port -- Port of the smtp server.
-    user -- Email of the sender for authentication.
-    password -- Password of the sender for authentication
+    user -- Email of the sender for authentication (optional if using IP relay).
+    password -- Password of the sender for authentication (optional if using IP relay).
     files -- List of files to be attached (optional)
-    TLS -- Decide if use TLS or SSL as encryption mechanism (default to True)
-
-    Returns: An error message.
+    encryption -- Cifrado a utilizar: "TLS" (ej. puerto 587), "SSL" (ej. puerto 465) o "NONE" (ej. puerto 25)
+    
+    Returns: An error message (empty string if success).
     """
     error_message = ""
     timeout = False
@@ -278,8 +278,6 @@ def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, p
     msg['Subject'] = subject
     msg['From'] = send_from
     msg['To'] = send_to
-
-    # Set the type to HTML
     msg.add_header('Content-Type', 'text/html')
     msg.set_payload(body)
 
@@ -289,49 +287,61 @@ def send_mail_smtp(subject, send_from, send_to, body, smtp_server, port, user, p
         try:
             with open(f, "rb") as fil:
                 part = MIMEApplication(
-
                     fil.read(),
                     Name=basename(f)
                 )
-            # When the file is closed is attached to the message
             part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
             msg.attach(part)
         except OSError:
             error_message += "No se encontró o no se pudo abrir el archivo: " + f + "\n"
 
-    # Create the connection (TLS or SSL)
-    if TLS:
-        try:
-            smtpObj = smtplib.SMTP(smtp_server, port, timeout=20)
-        except OSError:
-            error_message += "Se excedió el tiempo de espera." + "\n"
-            timeout = True
-    else:
-        try:
+    # Create the connection based on the encryption type
+    try:
+        enc = encryption.upper() if encryption else "TLS"
+        
+        if enc == "SSL":
+            # Connection for SSL (465)
             smtpObj = smtplib.SMTP_SSL(smtp_server, port, timeout=20)
-        except OSError:
-            error_message += "Se excedió el tiempo de espera." + "\n"
-            timeout = True
+        else:
+            # Connection for TLS (587) or NONE (25)
+            smtpObj = smtplib.SMTP(smtp_server, port, timeout=20)
+        
+        # Descomenta la siguiente línea si necesitas depurar la traza SMTP en consola
+        # smtpObj.set_debuglevel(1)
+        
+    except OSError:
+        error_message += "Se excedió el tiempo de espera o falló la conexión con el servidor." + "\n"
+        timeout = True
 
-    # If the limit time hasn't passed
     if not timeout:
-        smtpObj.ehlo()
-        if TLS:
-            smtpObj.starttls()
-
-        # Login to authenticate with the mail server
         try:
-            smtpObj.login(user, password)
-        except smtplib.SMTPAuthenticationError:
-            error_message += "Error de autentificación. Comprueba usuario y contraseña." + "\n"
+            smtpObj.ehlo()
+            
+            if enc == "TLS":
+                smtpObj.starttls()
+                smtpObj.ehlo()  # Obligatorio tras starttls
 
-        # Send the mail
-        try:
+            is_valid_user = user and str(user).strip().lower() not in ["", "none", "null"]
+            is_valid_pass = password and str(password).strip().lower() not in ["", "none", "null"]
+
+            if is_valid_user and is_valid_pass:
+                smtpObj.login(user, password)
+
             smtpObj.sendmail(msg['From'], [msg['To']], msg.as_string().encode('utf-8'))
-        except smtplib.SMTPSenderRefused:
-            error_message += "El servidor de correo rechazó la conexión." + "\n"
-        # Close the connection
-        smtpObj.quit()
+            
+        except smtplib.SMTPAuthenticationError:
+            error_message += "Error de autentificación. Comprueba usuario y contraseña.\n"
+        except smtplib.SMTPResponseException as e:
+            error_message += f"Error del servidor de correo [{e.smtp_code}]: {e.smtp_error.decode('utf-8', errors='ignore')}\n"
+        except smtplib.SMTPServerDisconnected as e:
+            error_message += f"El servidor cerró la conexión inesperadamente. Detalle: {str(e)}\n"
+        except Exception as e:
+            error_message += f"Error inesperado: {str(e)}\n"
+        finally:
+            try:
+                smtpObj.quit()
+            except Exception:
+                pass
 
     return error_message
 
@@ -724,9 +734,9 @@ if __name__ == "__main__":
                 smtp_password = config['email'].get('smtp_password')
             else:
                 sys.exit("El puerto del servidor SMTP no se ha especificado (smtp_password)")
-            TLS = config['email'].getboolean('TLS')
+            encryption = config['email'].get('encryption')
             error_send_mail = send_mail_smtp(subject, sender, receiver, body, smtp_server, smtp_port,
-                                             smtp_user, smtp_password, files=None, TLS=True)
+                                             smtp_user, smtp_password, None, encryption)
         elif config['email']['method'] == 'sendmail':
             if config.has_option('executables', 'sendmail'):
                 command_path = config['executables'].get('sendmail')
